@@ -1,58 +1,38 @@
-library(tidyverse)
 library(caret)
-library(mlbench)
+library(tidyverse)
 library(MLmetrics)
 
-data("PimaIndiansDiabetes")
-pd <- PimaIndiansDiabetes
+mtcars <- rownames_to_column(mtcars, "model")
+df_mt <- mtcars
+View(df_mt)
 
-## explore dataset
+## split data 
 
-glimpse(pd)
+tts <- function(data, size=0.7){
+  set.seed(12)
+  n <- nrow(data)
+  train_id <- sample(1:n, size*n)
+  train_df <- data[train_id,]
+  test_df <- data[-train_id,]
+  return(list(train_df, test_df))
+}
 
-## check missing value
+prep_df <- train_test_split(df_mt)
 
-mean(complete.cases(pd))
+## train ml
 
-## select variable
+model1 <- train(mpg ~ hp + wt + am, data = prep_df[[1]], method = "lm", )
 
-df_starter <- pd %>%
-  select(2,5,6,8,diabetes)
+## Score
 
-df_starter %>% 
-  group_by(diabetes) %>%
-  summarise(mean(age),mean(mass))
+score <- predict(model1, prep_df[[2]])
 
-## 1. split data
-set.seed(29)
-n <- nrow(df_starter)
-id <- sample(1:n, size=n*0.8)
-train_df <- df_starter[id,]
-test_df <- df_starter[-id,]
+## Eval
 
-## 2. train data
+model_eva <- model1[[4]] %>% select(RMSE, MAE, Rsquared)
 
-ctrl <- trainControl(method = "cv", number = 5, verboseIter = TRUE
-                     ,summaryFunction = prSummary, classProbs = TRUE)
+pred_eva <- list(RMSE(y_pred = score, y_true = prep_df[[2]]$mpg),
+MAE(y_pred = score, y_true = prep_df[[2]]$mpg),
+R2_Score(y_pred = score, y_true = prep_df[[2]]$mpg))
 
-set.seed(29)
-knn_model <- train(diabetes ~ .,
-                     data = train_df,
-                     method = "knn",
-                     metric = "Recall",
-                     trControl = ctrl,
-                     tuneLength = 5
-                     )
-
-## 3. score
-
-p <- predict(knn_model, newdata = test_df)
-
-## 4. evaluate
-
-mean(p == test_df$diabetes)
-
-## 5. confusion matrix
-
-confusionMatrix(p, test_df$diabetes, positive = "pos", mode="prec_recall")
-
+add_row(model_eva, RMSE = pred_eva[[1]], MAE = pred_eva[[2]], Rsquared = pred_eva[[3]] )
